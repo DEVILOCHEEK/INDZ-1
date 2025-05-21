@@ -25,12 +25,6 @@ jobs:
       with:
         python-version: 3.10
 
-    - name: Set up PostgreSQL
-      run: |
-        choco install postgresql --version=13.3 -y
-        net start postgresql
-      shell: powershell
-
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
