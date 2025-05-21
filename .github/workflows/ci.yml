@@ -23,11 +23,11 @@ jobs:
         with:
           python-version: 3.11
 
-- name: Install dependencies with django-stubs
-  run: |
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-    pip install django-stubs flake8 mypy pytest
+      - name: Install dependencies with django-stubs
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install django-stubs flake8 mypy pytest
 
       - name: Static code analysis - flake8
         run: flake8 .
