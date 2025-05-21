@@ -15,6 +15,7 @@ jobs:
       POSTGRES_DB: tododb
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
+      PYTHONPATH: ${{ github.workspace }}
 
     steps:
     - name: Checkout code
@@ -28,7 +29,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        pip install flake8 black pytest coverage
+        pip install flake8 black pytest coverage pytest-cov
 
     - name: Format code with Black
       run: black app tests
