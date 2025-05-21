@@ -11,10 +11,27 @@ on:
 jobs:
   build-and-test:
     runs-on: windows-latest
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: tododb
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
       POSTGRES_DB: tododb
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
+      DATABASE_URL: postgresql://user:pass@localhost:5432/tododb
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
@@ -29,7 +46,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install flake8 black pytest coverage pytest-cov
+          pip install flake8 black pytest coverage pytest-cov psycopg2-binary
 
       - name: Format code with Black
         run: black app tests
