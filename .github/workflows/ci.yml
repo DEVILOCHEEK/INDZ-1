@@ -1,4 +1,4 @@
-name: Django CI/CD Pipeline
+name: CI Pipeline
 
 on:
   push:
@@ -8,110 +8,80 @@ on:
     branches:
       - main
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/django-app
-
 jobs:
-  lint_and_test:
+  build-and-test:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    env:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11
-
-      - name: Install dependencies with django-stubs
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install django-stubs flake8 mypy pytest
-
-      - name: Static code analysis - flake8
-        run: flake8 .
-
-      - name: Static type checking - mypy
-        run: mypy .
-
-      - name: Run unit tests
-        run: pytest tests/unit --maxfail=1 --disable-warnings -q
-
-      - name: Run integration tests
-        run: pytest tests/integration --maxfail=1 --disable-warnings -q
-
-      - name: Run acceptance tests
-        run: pytest tests/acceptance --maxfail=1 --disable-warnings -q
-
-  build_and_push_docker:
-    needs: lint_and_test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Docker image
-        run: docker build -t $IMAGE_NAME:latest .
-
-      - name: Push Docker image
-        run: docker push $IMAGE_NAME:latest
-
-  post_release_tasks:
-    needs: build_and_push_docker
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Notify Slack about successful release
-        uses: 8398a7/action-slack@v3
-        with:
-          status: custom
-          custom_payload: |
-            {
-              "text": "Django-app успішно зібрано і випущено! Docker image: ${{ env.IMAGE_NAME }}:latest",
-              "attachments": [
-                {
-                  "color": "good",
-                  "fields": [
-                    {
-                      "title": "Гілка",
-                      "value": "${{ github.ref }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Коміт",
-                      "value": "${{ github.sha }}",
-                      "short": true
-                    }
-                  ]
-                }
-              ]
-            }
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      - name: Create Jira comment about release
+    services:
+      postgres:
+        image: postgres:13
         env:
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          ISSUE_KEY: INDZ-1
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-        run: |
-          if [[ -z "$JIRA_API_TOKEN" || -z "$JIRA_BASE_URL" || -z "$JIRA_USER_EMAIL" ]]; then
-            echo "Jira secrets missing, skipping Jira comment"
-            exit 0
-          fi
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
-          COMMENT="Release successful: commit $GITHUB_SHA on branch main. Docker image: $IMAGE_NAME:latest"
-          curl -X POST -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            --data "{\"body\": \"${COMMENT//\"/\\\"}\"}" \
-            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/comment"
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install flake8 pytest coverage
+
+    - name: Static code analysis (flake8)
+      run: flake8 app tests
+
+    - name: Unit & Integration Tests
+      run: pytest tests --maxfail=1 --disable-warnings --cov=app
+
+    - name: Acceptance Test
+      run: |
+        python main.py &  # запуск сервера у фоні
+        sleep 5
+        curl -X GET http://127.0.0.1:5000/healthcheck
+
+    - name: Build Docker Image
+      run: docker build -t ghcr.io/${{ github.repository }}:latest .
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push Docker image
+      run: docker push ghcr.io/${{ github.repository }}:latest
+
+    - name: Slack notification
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        fields: repo,message,commit,author
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+    - name: Create GitHub issue on failure
+      if: failure()
+      uses: peter-evans/create-issue-from-file@v4
+      with:
+        title: "CI failed on ${{ github.sha }}"
+        content-filepath: error.log
+        labels: bug, ci
