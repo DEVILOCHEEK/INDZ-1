@@ -14,7 +14,6 @@ env:
 jobs:
   lint_and_test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -79,18 +78,18 @@ jobs:
           status: custom
           custom_payload: |
             {
-              "text": "Django-app successfully built and released! Docker image pushed: ${{ env.IMAGE_NAME }}:latest",
+              "text": "Django-app успішно зібрано і випущено! Docker image: ${{ env.IMAGE_NAME }}:latest",
               "attachments": [
                 {
                   "color": "good",
                   "fields": [
                     {
-                      "title": "Branch",
+                      "title": "Гілка",
                       "value": "${{ github.ref }}",
                       "short": true
                     },
                     {
-                      "title": "Commit",
+                      "title": "Коміт",
                       "value": "${{ github.sha }}",
                       "short": true
                     }
@@ -101,12 +100,22 @@ jobs:
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Create Jira comment about release
-        if: ${{ secrets.JIRA_API_TOKEN && secrets.JIRA_BASE_URL && secrets.JIRA_USER_EMAIL }}
-        uses: atlassian/gajira-comment@v3
-        with:
-          issue: YOURPROJECT-RELEASE
-          body: "Release successful: commit ${{ github.sha }} on branch main. Docker image: ${{ env.IMAGE_NAME }}:latest"
+        if: ${{ secrets.JIRA_API_TOKEN }}
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          ISSUE_KEY: YOURPROJECT-RELEASE
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          # Перевіряємо, чи всі потрібні змінні задані
+          if [[ -z "$JIRA_BASE_URL" || -z "$JIRA_USER_EMAIL" || -z "$JIRA_API_TOKEN" ]]; then
+            echo "Jira credentials missing, skipping Jira comment"
+            exit 0
+          fi
+
+          COMMENT="Release successful: commit $GITHUB_SHA on branch main. Docker image: $IMAGE_NAME:latest"
+          curl -X POST -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "{\"body\": \"${COMMENT//\"/\\\"}\"}" \
+            "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/comment"
