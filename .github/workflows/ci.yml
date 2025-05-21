@@ -45,8 +45,8 @@ jobs:
         run: pytest tests/acceptance --maxfail=1 --disable-warnings -q
 
   build_and_push_docker:
-    runs-on: ubuntu-latest
     needs: lint_and_test
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
@@ -60,16 +60,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Docker image
-        run: |
-          docker build -t $IMAGE_NAME:latest .
+        run: docker build -t $IMAGE_NAME:latest .
 
       - name: Push Docker image
-        run: |
-          docker push $IMAGE_NAME:latest
+        run: docker push $IMAGE_NAME:latest
 
   post_release_tasks:
-    runs-on: ubuntu-latest
     needs: build_and_push_docker
+    runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Notify Slack about successful release
@@ -100,17 +98,15 @@ jobs:
           slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Create Jira comment about release
-        if: ${{ secrets.JIRA_API_TOKEN }}
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          ISSUE_KEY: YOURPROJECT-RELEASE
+          ISSUE_KEY: INDZ-1
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: |
-          # Перевіряємо, чи всі потрібні змінні задані
-          if [[ -z "$JIRA_BASE_URL" || -z "$JIRA_USER_EMAIL" || -z "$JIRA_API_TOKEN" ]]; then
-            echo "Jira credentials missing, skipping Jira comment"
+          if [[ -z "$JIRA_API_TOKEN" || -z "$JIRA_BASE_URL" || -z "$JIRA_USER_EMAIL" ]]; then
+            echo "Jira secrets missing, skipping Jira comment"
             exit 0
           fi
 
