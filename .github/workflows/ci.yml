@@ -28,7 +28,10 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        pip install flake8 pytest coverage
+        pip install flake8 black pytest coverage
+
+    - name: Format code with Black
+      run: black app tests
 
     - name: Static code analysis (flake8)
       run: flake8 app tests
