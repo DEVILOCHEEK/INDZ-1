@@ -65,7 +65,10 @@ jobs:
           curl -X GET http://127.0.0.1:5000/healthcheck
 
       - name: Build Docker Image
-        run: docker build -t ghcr.io/${{ github.repository }}:latest .
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository }}"
+          IMAGE_NAME_LOWER=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE_NAME_LOWER:latest .
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -75,7 +78,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push Docker Image
-        run: docker push ghcr.io/${{ github.repository }}:latest
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository }}"
+          IMAGE_NAME_LOWER=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+          docker push $IMAGE_NAME_LOWER:latest
 
       - name: Slack notification
         uses: 8398a7/action-slack@v3
