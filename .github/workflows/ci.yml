@@ -18,59 +18,59 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.10
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-        pip install flake8 black pytest coverage pytest-cov
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install flake8 black pytest coverage pytest-cov
 
-    - name: Format code with Black
-      run: black app tests
+      - name: Format code with Black
+        run: black app tests
 
-    - name: Static code analysis (flake8)
-      run: flake8 app tests
+      - name: Static code analysis (flake8)
+        run: flake8 app tests
 
-    - name: Unit & Integration Tests
-      run: pytest tests --maxfail=1 --disable-warnings --cov=app
+      - name: Unit & Integration Tests
+        run: pytest tests --maxfail=1 --disable-warnings --cov=app
 
-    - name: Acceptance Test
-      run: |
-        start /B python main.py
-        timeout /T 5
-        curl -X GET http://127.0.0.1:5000/healthcheck
+      - name: Acceptance Test
+        run: |
+          start /B python main.py
+          timeout /T 5
+          curl -X GET http://127.0.0.1:5000/healthcheck
 
-    - name: Build Docker Image
-      run: docker build -t ghcr.io/${{ github.repository }}:latest .
+      - name: Build Docker Image
+        run: docker build -t ghcr.io/${{ github.repository }}:latest .
 
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Push Docker image
-      run: docker push ghcr.io/${{ github.repository }}:latest
+      - name: Push Docker image
+        run: docker push ghcr.io/${{ github.repository }}:latest
 
-    - name: Slack notification
-      uses: 8398a7/action-slack@v3
-      with:
-        status: ${{ job.status }}
-        fields: repo,message,commit,author
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+      - name: Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
-    - name: Create GitHub issue on failure
-      if: failure()
-      uses: peter-evans/create-issue-from-file@v4
-      with:
-        title: "CI failed on ${{ github.sha }}"
-        content-filepath: error.log
-        labels: bug, ci
+      - name: Create GitHub issue on failure
+        if: failure()
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: "CI failed on ${{ github.sha }}"
+          content-filepath: error.log
+          labels: bug, ci
