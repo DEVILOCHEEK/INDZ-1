@@ -8,87 +8,71 @@ on:
     branches:
       - main
 
+env:
+  PYTHONPATH: ${{ github.workspace }}
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_DB: tododb
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: pass
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     env:
       POSTGRES_DB: tododb
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
-      DATABASE_URL: postgresql://user:pass@localhost:5432/tododb
-      PYTHONPATH: ${{ github.workspace }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Python 3.11.5
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11.5
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install flake8 black pytest coverage pytest-cov psycopg2-binary
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install flake8 pytest coverage black
 
-      - name: Format code with Black
-        run: black app tests
+    - name: Static code analysis (flake8)
+      run: flake8 app tests
 
-      - name: Static code analysis (flake8)
-        run: flake8 app tests
+    - name: Format code (black)
+      run: black --check app tests
 
-      - name: Run Unit & Integration Tests
-        run: pytest tests --maxfail=1 --disable-warnings --cov=app
+    - name: Run tests with coverage
+      run: pytest tests --maxfail=1 --disable-warnings --cov=app
 
-      - name: Acceptance Test (healthcheck)
-        run: |
-          python main.py &
-          sleep 5
-          curl -X GET http://127.0.0.1:5000/healthcheck
+    - name: Acceptance Test
+      run: |
+        nohup python main.py &
+        sleep 5
+        curl -X GET http://127.0.0.1:5000/healthcheck
 
-      - name: Build Docker Image
-        run: docker build -t ghcr.io/${{ github.repository }}:latest .
+    - name: Build Docker Image
+      run: docker build -t ghcr.io/devilocheek/indz-1:latest .
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push Docker Image
-        run: docker push ghcr.io/${{ github.repository }}:latest
+    - name: Push Docker image
+      run: docker push ghcr.io/devilocheek/indz-1:latest
 
-      - name: Slack notification
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          fields: repo,message,commit,author
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+    - name: Slack notification
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        fields: repo,message,commit,author
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
 
-      - name: Create GitHub issue on failure
-        if: failure()
-        uses: peter-evans/create-issue-from-file@v4
-        with:
-          title: "CI failed on ${{ github.sha }}"
-          content-filepath: error.log
-          labels: bug, ci
+    - name: Create GitHub issue on failure
+      if: failure()
+      uses: peter-evans/create-issue-from-file@v4
+      with:
+        title: "CI failed on ${{ github.sha }}"
+        content-filepath: error.log
+        labels: bug, ci
