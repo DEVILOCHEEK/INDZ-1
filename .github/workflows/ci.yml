@@ -1,0 +1,70 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run static analysis
+      run: npm run lint
+
+    - name: Run unit tests
+      run: npm test
+
+    - name: Run integration tests
+      run: npm run test:integration
+
+    - name: Run acceptance tests
+      run: npm run test:acceptance
+
+    - name: Build Docker image
+      run: docker build -t ghcr.io/${{ github.repository_owner }}/myapp:${{ github.sha }} .
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push Docker image
+      run: docker push ghcr.io/${{ github.repository_owner }}/myapp:${{ github.sha }}
+
+    - name: Notify Slack about build status
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Create issue in Jira (example)
+      if: failure()
+      uses: atlassian/gajira-create@v2
+      with:
+        project: "PROJ"
+        summary: "CI failure in ${{ github.workflow }}"
+        description: "Job failed for commit ${{ github.sha }}"
+      env:
+        JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+        JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
