@@ -2,18 +2,14 @@ import pytest
 from app import create_app
 
 @pytest.fixture
-def app():
+def client():
     app = create_app()
-    app.config.update({
-        "TESTING": True,
-    })
-    yield app
+    app.config['TESTING'] = True
 
-@pytest.fixture
-def client(app):
-    return app.test_client()
+    with app.test_client() as client:
+        yield client
 
 def test_healthcheck(client):
-    response = client.get("/healthcheck")
+    response = client.get('/healthcheck')
     assert response.status_code == 200
-    assert response.json == {"status": "ok"}
+    assert response.json == {'status': 'ok'}
